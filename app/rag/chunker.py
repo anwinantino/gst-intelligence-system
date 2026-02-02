@@ -1,33 +1,35 @@
-import re
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
-def chunk_gst_text(text: str, source: str):
+def chunk_documents(pages, chunk_size: int = 800, chunk_overlap: int = 100):
     """
-    Splits GST text using legal anchors when possible.
-    Falls back to size-based chunks if anchors are missing.
+    Split GST documents into semantically meaningful chunks.
+
+    Returns:
+        List[dict] with keys:
+        - content
+        - page
     """
-    section_pattern = r"(Section\s+\d+[A-Z]?|Rule\s+\d+|Notification\s+No\.\s*\d+)"
-    parts = re.split(section_pattern, text)
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", " ", ""],
+    )
 
     chunks = []
-    current_section = "General"
 
-    for part in parts:
-        part = part.strip()
-        if not part:
-            continue
+    for page in pages:
+        page_number = page.metadata.get("page", None)
+        texts = splitter.split_text(page.page_content)
 
-        if re.match(section_pattern, part):
-            current_section = part
-            continue
-
-        if len(part) > 200:
+        for text in texts:
             chunks.append(
                 {
-                    "content": part,
-                    "section": current_section,
-                    "source": source,
+                    "content": text.strip(),
+                    "page": page_number,
                 }
             )
 
     return chunks
+

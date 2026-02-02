@@ -1,47 +1,37 @@
-from typing import List, Dict
+from app.rag.pinecone_client import get_or_create_index
+from app.rag.pdf_loader import load_pdf
+from app.rag.chunker import chunk_documents
+from app.rag.embedder import embed_text
 
-from app.rag.embeddings import get_embedding_model
-from app.rag.pinecone_client import get_pinecone_client
-from app.core.config import settings
+BATCH_SIZE = 1000
 
 
-def index_chunks(chunks: List[Dict[str, str]]) -> None:
-    """
-    Index GST document chunks into Pinecone.
+def index_gst_pdf(pdf_path: str) -> int:
+    index = get_or_create_index()
 
-    Each chunk must have:
-    {
-        "content": str,
-        "source": str,
-        "section": str
-    }
-    """
-
-    # Initialize clients
-    embedder = get_embedding_model()
-    pinecone = get_pinecone_client()
-    index = pinecone.Index(settings.pinecone_index_name)
+    pages = load_pdf(pdf_path)
+    chunks = chunk_documents(pages)
 
     vectors = []
 
-    for idx, chunk in enumerate(chunks):
-        # Generate embedding (HuggingFace sentence-transformers)
-        embedding = embedder.encode(
-            chunk["content"],
-            normalize_embeddings=True
-        ).tolist()
+    for i, chunk in enumerate(chunks):
+        embedding = embed_text(chunk["content"])
 
         vectors.append(
             {
-                "id": f"gst-{idx}",
+                "id": f"gst-{i}",
                 "values": embedding,
                 "metadata": {
-                    "source": chunk["source"],
-                    "section": chunk["section"],
-                    "text": chunk["content"],
+                    "source": "gst_pdf",
+                    "page": chunk["page"],
+                    "text": chunk["content"][:1000],  # metadata limit safety
                 },
             }
         )
 
-    # Upsert into Pinecone
-    index.upsert(vectors=vectors)
+    # 🔥 BATCHED UPSERT (CRITICAL)
+    for i in range(0, len(vectors), BATCH_SIZE):
+        batch = vectors[i : i + BATCH_SIZE]
+        index.upsert(batch)
+
+    return len(vectors)

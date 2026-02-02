@@ -1,5 +1,5 @@
 from app.schemas.sql_output import SQLPlan, SQLStatement
-from app.schemas.invoice_nlp import InvoiceIn
+from app.schemas.invoice import InvoiceIn
 
 
 def build_insert_plan(invoice: InvoiceIn) -> SQLPlan:
